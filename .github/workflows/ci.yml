@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-go:
+    name: Go Unit & Race Detection
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.22.x', '1.23.x' ]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Run Unit & Race Tests
+        run: go test -v -race -count=1 ./...
+
+      - name: Run Go Vet
+        run: go vet ./...
+
+  test-node:
+    name: Node.js & NestJS Package Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [ 18.x, 20.x, 22.x ]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Run Node.js Tests
+        run: |
+          node -e "
+            const { LoadGuard, OverloadedError } = require('./packages/node/dist/index.js');
+            const assert = require('assert');
+            const g = new LoadGuard({ maxConcurrency: 1, maxQueueSize: 0 });
+            g.acquire().then(release => {
+              g.acquire().catch(err => {
+                assert(err instanceof OverloadedError);
+                release();
+                console.log('Node.js LoadGuard CI validation passed!');
+              });
+            });
+          "
+
+  test-php:
+    name: PHP & Laravel Package Syntax & Lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: [ '8.0', '8.1', '8.2', '8.3' ]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+
+      - name: Validate PHP Syntax
+        run: |
+          php -l packages/php/src/Guard.php
+          php -l packages/php/src/Laravel/LoadGuardMiddleware.php
+          php -l packages/php/src/Laravel/LoadGuardServiceProvider.php

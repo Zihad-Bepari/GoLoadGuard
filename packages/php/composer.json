@@ -1,0 +1,26 @@
+{
+  "name": "goloadguard/goloadguard",
+  "description": "Production-grade, zero-dependency in-process concurrency control and bounded backpressure library for PHP and Laravel (cPanel and Shared-Hosting Friendly)",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "GoLoadGuard Authors"
+    }
+  ],
+  "require": {
+    "php": ">=8.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "GoLoadGuard\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "GoLoadGuard\\Laravel\\LoadGuardServiceProvider"
+      ]
+    }
+  }
+}

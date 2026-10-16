@@ -1,0 +1,22 @@
+{
+  "name": "@goloadguard/node",
+  "version": "1.0.0",
+  "description": "Production-grade, zero-dependency in-process concurrency control and bounded FIFO backpressure library for Node.js and NestJS",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/**/*.test.js"
+  },
+  "keywords": [
+    "loadguard",
+    "concurrency",
+    "backpressure",
+    "rate-limit",
+    "load-protection",
+    "fifo-queue",
+    "nestjs-guard"
+  ],
+  "author": "GoLoadGuard Authors",
+  "license": "MIT"
+}
