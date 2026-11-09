@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/goloadguard/goloadguard"
+	"github.com/Zihad-Bepari/GoLoadGuard"
 )
 
 // Options configures the HTTP middleware behavior.

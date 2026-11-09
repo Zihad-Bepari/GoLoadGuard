@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/goloadguard/goloadguard"
+	"github.com/Zihad-Bepari/GoLoadGuard"
 )
 
 // BenchmarkUncontended measures the latency and allocations of uncontended Do calls.

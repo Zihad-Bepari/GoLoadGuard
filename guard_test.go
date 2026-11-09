@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goloadguard/goloadguard"
+	"github.com/Zihad-Bepari/GoLoadGuard"
 )
 
 // TestConfigValidation verifies that invalid configurations return ErrInvalidConfig.

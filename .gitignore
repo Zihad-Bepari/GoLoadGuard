@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+packages/node/node_modules/
+vendor/
+
+# Environment and temp
+.env
+*.lock
+*.log
+/tmp/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# IDE specific
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test / Coverage artifacts
+*.out
+*.test

@@ -239,30 +239,118 @@ export class LoadGuard {
   }
 }
 
+let _defaultGuard: LoadGuard | undefined;
+
+/**
+ * Returns the globally registered default LoadGuard instance, if created via loadGuardMiddleware.
+ */
+export function getDefaultGuard(): LoadGuard | undefined {
+  return _defaultGuard;
+}
+
 /**
  * Express / Connect compatible HTTP Middleware.
+ * Hardened with Zero-Leak Socket lifecycle protection against client disconnections.
  */
 export function expressMiddleware(
   guard: LoadGuard,
-  options: { overloadStatus?: number; retryAfterSeconds?: number } = {}
+  options: { overloadStatus?: number; retryAfterSeconds?: number; bypassPaths?: string[] } = {}
 ) {
   const status = options.overloadStatus ?? 503;
 
   return async (req: any, res: any, next: (err?: any) => void) => {
+    // If client connection is already destroyed or ended
+    if (req.destroyed || res.destroyed || (res.socket && res.socket.destroyed)) {
+      return;
+    }
+
+    // Check optional path bypass
+    if (options.bypassPaths && options.bypassPaths.some((p) => req.path?.includes(p))) {
+      return next();
+    }
+
+    let release: (() => void) | undefined;
     try {
-      const release = await guard.acquire();
-      res.on('finish', release);
-      res.on('close', release);
-      next();
-    } catch (err) {
-      if (err instanceof OverloadedError || err instanceof ClosedError) {
+      release = await guard.acquire();
+    } catch (err: any) {
+      if (
+        err instanceof OverloadedError ||
+        err instanceof ClosedError ||
+        err?.name === 'OverloadedError' ||
+        err?.name === 'ClosedError'
+      ) {
         if (options.retryAfterSeconds) {
           res.setHeader('Retry-After', String(options.retryAfterSeconds));
         }
         res.status(status).send('Service Unavailable - System Overloaded');
         return;
       }
-      next(err);
+      return next(err);
     }
+
+    // Safety check: if socket was terminated while waiting in FIFO queue
+    if (req.destroyed || res.destroyed || (res.socket && res.socket.destroyed)) {
+      release();
+      return;
+    }
+
+    let released = false;
+    const safeRelease = () => {
+      if (!released) {
+        released = true;
+        release!();
+      }
+    };
+
+    res.on('finish', safeRelease);
+    res.on('close', safeRelease);
+    req.on('close', safeRelease);
+    req.on('error', safeRelease);
+    res.on('error', safeRelease);
+
+    next();
   };
 }
+
+/**
+ * Plug-and-play Express Middleware with intelligent ultra-capacity defaults.
+ * Allows zero-config integration across any Node.js / Express application.
+ */
+export function loadGuardMiddleware(
+  options: Partial<LoadGuardConfig> & {
+    overloadStatus?: number;
+    retryAfterSeconds?: number;
+    bypassPaths?: string[];
+  } = {}
+) {
+  const guard = new LoadGuard({
+    maxConcurrency: options.maxConcurrency ?? 50000,
+    maxQueueSize: options.maxQueueSize ?? 100000,
+    queueTimeoutMs: options.queueTimeoutMs ?? 15000,
+  });
+  _defaultGuard = guard;
+  return expressMiddleware(guard, options);
+}
+
+/**
+ * NestJS Guard for protecting endpoints against overload.
+ * Requires @nestjs/common to be installed in the project.
+ */
+let _nestGuard: typeof import('./nest.guard').NestLoadGuard | undefined;
+export const NestLoadGuard: typeof import('./nest.guard').NestLoadGuard = new Proxy(
+  function () {} as any,
+  {
+    get(_target, prop) {
+      if (!_nestGuard) {
+        _nestGuard = require('./nest.guard').NestLoadGuard;
+      }
+      return (_nestGuard as any)[prop];
+    },
+    construct(_target, args) {
+      if (!_nestGuard) {
+        _nestGuard = require('./nest.guard').NestLoadGuard;
+      }
+      return new (_nestGuard as any)(...args);
+    },
+  }
+);

@@ -31,7 +31,12 @@ class LoadGuardMiddleware
         int $retryAfterSeconds = 5
     ) {
         $storagePath = function_exists('storage_path') ? storage_path('framework') : sys_get_temp_dir();
-        $guard = new Guard($maxConcurrency, $maxQueueSize, $queueTimeoutMs, $storagePath);
+        $guard = new Guard(
+            (int)$maxConcurrency,
+            (int)$maxQueueSize,
+            (int)$queueTimeoutMs,
+            $storagePath
+        );
 
         try {
             $handle = $guard->acquire();

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/goloadguard/goloadguard"
+	"github.com/Zihad-Bepari/GoLoadGuard"
 )
 
 // ExampleGuard_Do demonstrates protecting a critical section with concurrency limits.

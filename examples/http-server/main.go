@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/goloadguard/goloadguard"
-	"github.com/goloadguard/goloadguard/httpguard"
+	"github.com/Zihad-Bepari/GoLoadGuard"
+	"github.com/Zihad-Bepari/GoLoadGuard/httpguard"
 )
 
 func main() {

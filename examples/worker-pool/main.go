@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goloadguard/goloadguard"
+	"github.com/Zihad-Bepari/GoLoadGuard"
 )
 
 type Job struct {

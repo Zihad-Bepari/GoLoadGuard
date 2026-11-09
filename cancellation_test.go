@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goloadguard/goloadguard"
+	"github.com/Zihad-Bepari/GoLoadGuard"
 )
 
 // TestCancellationBeforeAcquisition verifies pre-check rejects already-canceled contexts.
