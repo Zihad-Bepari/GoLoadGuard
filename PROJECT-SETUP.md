@@ -18,7 +18,9 @@ This guide provides end-to-end instructions for installing, configuring, and int
    - [Custom Instance & Route-Specific Guarding](#custom-instance--route-specific-guarding)
    - [Zero-Leak Socket Protection Verification](#zero-leak-socket-protection-verification)
 4. [3. NestJS Setup](#3-nestjs-setup)
-   - [Global & Controller Guard Registration](#global--controller-guard-registration)
+   - [NestJS Installation](#nestjs-installation)
+   - [Option A: Global Guard Registration](#option-a-global-guard-registration-appmodulets)
+   - [Option B: Controller or Route-Specific Guarding](#option-b-controller-or-route-specific-guarding)
 5. [4. PHP (Native / Pure) Setup](#4-php-native--pure-setup)
    - [Installation](#php-installation)
    - [Core Closure Usage (`run`)](#core-closure-usage-run)
@@ -36,13 +38,13 @@ This guide provides end-to-end instructions for installing, configuring, and int
 
 ## Supported Platforms & Installation Summary
 
-| Platform | Package Manager | Package Identifier / Direct Install | Minimum Runtime |
+| Platform | Package Manager | Direct GitHub Install Command | Minimum Runtime |
 | :--- | :--- | :--- | :--- |
-| **Go** | `go get` | `github.com/Zihad-Bepari/GoLoadGuard` | Go 1.21+ |
-| **Node.js** | `npm` / `pnpm` / `yarn` | `@goloadguard/node` *(or `github:Zihad-Bepari/GoLoadGuard`)* | Node.js 18+ |
-| **NestJS** | `npm` | `@goloadguard/node` | NestJS 9+ |
-| **PHP** | `composer` | Direct VCS or local path repository | PHP 8.0+ |
-| **Laravel** | `composer` | Direct VCS or local path repository | Laravel 9, 10, 11 |
+| **Go** | `go get` | `go get github.com/Zihad-Bepari/GoLoadGuard` | Go 1.21+ |
+| **Node.js** | `npm` / `pnpm` / `yarn` | `npm install github:Zihad-Bepari/GoLoadGuard` | Node.js 18+ |
+| **NestJS** | `npm` / `pnpm` / `yarn` | `npm install github:Zihad-Bepari/GoLoadGuard` | NestJS 9+ |
+| **PHP** | `composer` | `composer require goloadguard/goloadguard:dev-main` | PHP 8.0+ |
+| **Laravel** | `composer` | `composer require goloadguard/goloadguard:dev-main` | Laravel 9, 10, 11 |
 
 ---
 
@@ -205,31 +207,37 @@ log.Printf("In-Flight: %d | Queued: %d | Accepted: %d | Rejected: %d | Canceled:
 
 ### Node.js Installation
 
-Install using npm:
+Install directly from the GitHub repository into your Node.js project:
 
 ```bash
-# If using the published package:
-npm install @goloadguard/node
-
-# Or install directly from the GitHub repository:
+# Standard GitHub install:
 npm install github:Zihad-Bepari/GoLoadGuard
+
+# Or install with a clean 'goloadguard' alias (Optional):
+npm install goloadguard@github:Zihad-Bepari/GoLoadGuard
 ```
 
-### 1-Line Plug-and-Play Middleware
+> **Note:** If you use yarn or pnpm:
+> `yarn add github:Zihad-Bepari/GoLoadGuard` or `pnpm add github:Zihad-Bepari/GoLoadGuard`
 
-To guard your entire Express server using ultra-capacity defaults (50,000 concurrency, 100,000 queue depth):
+### 1-Line Plug-and-Play Middleware (`app.js`)
+
+To guard your entire Express server against crashes, OOM, and traffic spikes, simply wrap your main app in `app.js` with `loadGuardMiddleware()`:
 
 ```javascript
+// app.js
 const express = require('express');
-const { loadGuardMiddleware } = require('@goloadguard/node');
+const { loadGuardMiddleware } = require('@goloadguard/node'); 
+// (If you installed with alias: const { loadGuardMiddleware } = require('goloadguard');)
 
 const app = express();
 
-// Protect all incoming routes
+// 🛡️ 1-Line Concurrency & Anti-Crash Protection for all routes:
 app.use(loadGuardMiddleware());
 
+// Your normal routes work as usual:
 app.get('/api/orders', (req, res) => {
-  res.json({ message: 'Processed under concurrency protection' });
+  res.json({ message: 'Processed safely under concurrency protection' });
 });
 
 app.listen(3000, () => console.log('Server running on port 3000'));
@@ -274,15 +282,23 @@ GoLoadGuard automatically binds to socket events (`finish`, `close`, `error`). I
 
 ## 3. NestJS Setup
 
-### Global & Controller Guard Registration
+### NestJS Installation
 
-GoLoadGuard provides a native NestJS Guard (`NestLoadGuard`):
+Install directly from GitHub into your NestJS project using npm, yarn, or pnpm:
+
+```bash
+npm install github:Zihad-Bepari/GoLoadGuard
+```
+
+### Option A: Global Guard Registration (`app.module.ts`)
+
+Protect all controllers and routes across your entire NestJS application:
 
 ```typescript
 // app.module.ts
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { NestLoadGuard } from '@goloadguard/node';
+import { NestLoadGuard, LoadGuard } from '@goloadguard/node';
 import { AppController } from './app.controller';
 
 @Module({
@@ -290,15 +306,44 @@ import { AppController } from './app.controller';
   providers: [
     {
       provide: APP_GUARD,
-      useValue: new NestLoadGuard({
-        maxConcurrency: 50,
-        maxQueueSize: 100,
-        queueTimeoutMs: 5000,
-      }),
+      useValue: new NestLoadGuard(
+        new LoadGuard({
+          maxConcurrency: 50,
+          maxQueueSize: 100,
+          queueTimeoutMs: 5000,
+        })
+      ),
     },
   ],
 })
 export class AppModule {}
+```
+
+### Option B: Controller or Route-Specific Guarding
+
+To guard specific heavy endpoints (e.g. data export, AI inference, report generation):
+
+```typescript
+// report.controller.ts
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { NestLoadGuard, LoadGuard } from '@goloadguard/node';
+
+const heavyGuard = new NestLoadGuard(
+  new LoadGuard({
+    maxConcurrency: 10,
+    maxQueueSize: 25,
+    queueTimeoutMs: 3000,
+  })
+);
+
+@Controller('reports')
+export class ReportController {
+  @Get('export')
+  @UseGuards(heavyGuard)
+  exportData() {
+    return { status: 'Export generated safely' };
+  }
+}
 ```
 
 ---
@@ -307,7 +352,17 @@ export class AppModule {}
 
 ### PHP Installation
 
-In your `composer.json`, add GoLoadGuard as a VCS repository:
+You can install GoLoadGuard directly from GitHub into any PHP project using Composer.
+
+#### Option A: Quick Command Line (Recommended)
+Run these two commands in your project terminal:
+```bash
+composer config repositories.goloadguard vcs https://github.com/Zihad-Bepari/GoLoadGuard.git
+composer require goloadguard/goloadguard:dev-main
+```
+
+#### Option B: Add to `composer.json` Manually
+Add GoLoadGuard as a VCS repository inside your project's `composer.json`:
 
 ```json
 {
@@ -318,13 +373,12 @@ In your `composer.json`, add GoLoadGuard as a VCS repository:
     }
   ],
   "require": {
-    "goloadguard/php": "*"
+    "goloadguard/goloadguard": "dev-main"
   }
 }
 ```
 
-Run composer update:
-
+Then run:
 ```bash
 composer update
 ```
