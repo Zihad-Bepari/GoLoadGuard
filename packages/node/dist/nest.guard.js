@@ -72,8 +72,15 @@ let NestLoadGuard = (() => {
             const res = http.getResponse();
             try {
                 const release = await this.guard.acquire();
-                res.on('finish', release);
-                res.on('close', release);
+                const rawRes = (res && res.raw) ? res.raw : res;
+                if (rawRes && typeof rawRes.on === 'function') {
+                    rawRes.on('finish', release);
+                    rawRes.on('close', release);
+                }
+                else if (res && typeof res.on === 'function') {
+                    res.on('finish', release);
+                    res.on('close', release);
+                }
                 return true;
             }
             catch (err) {

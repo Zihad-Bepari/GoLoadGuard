@@ -4,9 +4,7 @@ exports.NestLoadGuard = exports.LoadGuard = exports.ClosedError = exports.QueueT
 exports.getDefaultGuard = getDefaultGuard;
 exports.expressMiddleware = expressMiddleware;
 exports.loadGuardMiddleware = loadGuardMiddleware;
-/**
- * Custom error thrown when both concurrency capacity and queue are exhausted.
- */
+// Error thrown when capacity and queue are full
 class OverloadedError extends Error {
     constructor(message = 'LoadGuard: system overloaded, capacity and queue full') {
         super(message);
@@ -14,9 +12,7 @@ class OverloadedError extends Error {
     }
 }
 exports.OverloadedError = OverloadedError;
-/**
- * Custom error thrown when waiting in queue exceeds queueTimeoutMs.
- */
+// Error thrown when queue timeout is exceeded
 class QueueTimeoutError extends Error {
     constructor(message = 'LoadGuard: queue wait timeout exceeded') {
         super(message);
@@ -24,9 +20,7 @@ class QueueTimeoutError extends Error {
     }
 }
 exports.QueueTimeoutError = QueueTimeoutError;
-/**
- * Custom error thrown when acquiring from a closed Guard.
- */
+// Error thrown when guard is closed
 class ClosedError extends Error {
     constructor(message = 'LoadGuard: guard is closed') {
         super(message);
@@ -34,9 +28,7 @@ class ClosedError extends Error {
     }
 }
 exports.ClosedError = ClosedError;
-/**
- * In-process Concurrency Guard with strictly bounded FIFO queue.
- */
+// In-process concurrency limiter with FIFO queue
 class LoadGuard {
     maxConcurrency;
     maxQueueSize;
@@ -198,18 +190,15 @@ let _defaultGuard;
 function getDefaultGuard() {
     return _defaultGuard;
 }
-/**
- * Express / Connect compatible HTTP Middleware.
- * Hardened with Zero-Leak Socket lifecycle protection against client disconnections.
- */
+// Express middleware for concurrency limiting
 function expressMiddleware(guard, options = {}) {
     const status = options.overloadStatus ?? 503;
     return async (req, res, next) => {
-        // If client connection is already destroyed or ended
+        // ignore already closed connections
         if (req.destroyed || res.destroyed || (res.socket && res.socket.destroyed)) {
             return;
         }
-        // Check optional path bypass
+        // bypass path check
         if (options.bypassPaths && options.bypassPaths.some((p) => req.path?.includes(p))) {
             return next();
         }
@@ -230,7 +219,7 @@ function expressMiddleware(guard, options = {}) {
             }
             return next(err);
         }
-        // Safety check: if socket was terminated while waiting in FIFO queue
+        // check if socket aborted while waiting in queue
         if (req.destroyed || res.destroyed || (res.socket && res.socket.destroyed)) {
             release();
             return;
@@ -250,10 +239,7 @@ function expressMiddleware(guard, options = {}) {
         next();
     };
 }
-/**
- * Plug-and-play Express Middleware with intelligent ultra-capacity defaults.
- * Allows zero-config integration across any Node.js / Express application.
- */
+// Factory helper for Express middleware
 function loadGuardMiddleware(options = {}) {
     const guard = new LoadGuard({
         maxConcurrency: options.maxConcurrency ?? 50000,
@@ -263,10 +249,7 @@ function loadGuardMiddleware(options = {}) {
     _defaultGuard = guard;
     return expressMiddleware(guard, options);
 }
-/**
- * NestJS Guard for protecting endpoints against overload.
- * Requires @nestjs/common to be installed in the project.
- */
+// Lazy loader for NestJS Guard
 let _nestGuard;
 exports.NestLoadGuard = new Proxy(function () { }, {
     get(_target, prop) {

@@ -1,29 +1,11 @@
-/**
- * Configuration options for LoadGuard.
- */
+// Configuration options for LoadGuard
 export interface LoadGuardConfig {
-  /**
-   * Maximum number of concurrent operations allowed.
-   * Must be greater than 0.
-   */
   maxConcurrency: number;
-
-  /**
-   * Maximum queue depth for waiting callers.
-   * A value of 0 means immediate rejection when slots are saturated.
-   */
   maxQueueSize?: number;
-
-  /**
-   * Maximum duration (in milliseconds) a caller is permitted to wait in queue.
-   * Defaults to 0 (no timeout, waits until granted or aborted).
-   */
   queueTimeoutMs?: number;
 }
 
-/**
- * Point-in-time metrics snapshot.
- */
+// Runtime metrics snapshot
 export interface LoadGuardStats {
   currentInFlight: number;
   currentQueueSize: number;
@@ -34,9 +16,7 @@ export interface LoadGuardStats {
   closedRejections: number;
 }
 
-/**
- * Custom error thrown when both concurrency capacity and queue are exhausted.
- */
+// Error thrown when capacity and queue are full
 export class OverloadedError extends Error {
   constructor(message = 'LoadGuard: system overloaded, capacity and queue full') {
     super(message);
@@ -44,9 +24,7 @@ export class OverloadedError extends Error {
   }
 }
 
-/**
- * Custom error thrown when waiting in queue exceeds queueTimeoutMs.
- */
+// Error thrown when queue timeout is exceeded
 export class QueueTimeoutError extends Error {
   constructor(message = 'LoadGuard: queue wait timeout exceeded') {
     super(message);
@@ -54,9 +32,7 @@ export class QueueTimeoutError extends Error {
   }
 }
 
-/**
- * Custom error thrown when acquiring from a closed Guard.
- */
+// Error thrown when guard is closed
 export class ClosedError extends Error {
   constructor(message = 'LoadGuard: guard is closed') {
     super(message);
@@ -70,9 +46,7 @@ interface Waiter {
   timer?: NodeJS.Timeout;
 }
 
-/**
- * In-process Concurrency Guard with strictly bounded FIFO queue.
- */
+// In-process concurrency limiter with FIFO queue
 export class LoadGuard {
   private readonly maxConcurrency: number;
   private readonly maxQueueSize: number;
@@ -248,10 +222,7 @@ export function getDefaultGuard(): LoadGuard | undefined {
   return _defaultGuard;
 }
 
-/**
- * Express / Connect compatible HTTP Middleware.
- * Hardened with Zero-Leak Socket lifecycle protection against client disconnections.
- */
+// Express middleware for concurrency limiting
 export function expressMiddleware(
   guard: LoadGuard,
   options: { overloadStatus?: number; retryAfterSeconds?: number; bypassPaths?: string[] } = {}
@@ -259,12 +230,12 @@ export function expressMiddleware(
   const status = options.overloadStatus ?? 503;
 
   return async (req: any, res: any, next: (err?: any) => void) => {
-    // If client connection is already destroyed or ended
+    // ignore already closed connections
     if (req.destroyed || res.destroyed || (res.socket && res.socket.destroyed)) {
       return;
     }
 
-    // Check optional path bypass
+    // bypass path check
     if (options.bypassPaths && options.bypassPaths.some((p) => req.path?.includes(p))) {
       return next();
     }
@@ -288,7 +259,7 @@ export function expressMiddleware(
       return next(err);
     }
 
-    // Safety check: if socket was terminated while waiting in FIFO queue
+    // check if socket aborted while waiting in queue
     if (req.destroyed || res.destroyed || (res.socket && res.socket.destroyed)) {
       release();
       return;
@@ -312,10 +283,7 @@ export function expressMiddleware(
   };
 }
 
-/**
- * Plug-and-play Express Middleware with intelligent ultra-capacity defaults.
- * Allows zero-config integration across any Node.js / Express application.
- */
+// Factory helper for Express middleware
 export function loadGuardMiddleware(
   options: Partial<LoadGuardConfig> & {
     overloadStatus?: number;
@@ -332,10 +300,7 @@ export function loadGuardMiddleware(
   return expressMiddleware(guard, options);
 }
 
-/**
- * NestJS Guard for protecting endpoints against overload.
- * Requires @nestjs/common to be installed in the project.
- */
+// Lazy loader for NestJS Guard
 let _nestGuard: typeof import('./nest.guard').NestLoadGuard | undefined;
 export const NestLoadGuard: typeof import('./nest.guard').NestLoadGuard = new Proxy(
   function () {} as any,

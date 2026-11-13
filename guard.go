@@ -30,16 +30,6 @@ func New(cfg Config) (*Guard, error) {
 }
 
 // Do executes fn within the concurrency guard.
-//
-// Concurrency guarantees:
-// 1. If active permits < MaxConcurrency and queue is empty, execution starts immediately.
-// 2. If slots are busy and queue < MaxQueueSize, caller waits in FIFO order.
-// 3. If slots and queue are both full, ErrOverloaded is returned immediately without waiting.
-// 4. If guard is closed, ErrClosed is returned.
-// 5. If caller context is canceled before or during wait, caller is removed from queue.
-// 6. Post-grant check: If context cancels after grant but before fn execution,
-//    the acquired permit is reliably released/transferred without executing fn.
-// 7. Panics in fn naturally propagate while ensuring permit release via defer.
 func (g *Guard) Do(ctx context.Context, fn func(ctx context.Context) error) error {
 	if ctx == nil {
 		return ErrInvalidContext
@@ -48,25 +38,22 @@ func (g *Guard) Do(ctx context.Context, fn func(ctx context.Context) error) erro
 		return ErrNilCallback
 	}
 
-	// 1. Pre-check: if caller context is already canceled, do not attempt acquisition
+	// check context cancellation
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	// 2. Acquire a permit (or wait in FIFO queue)
+	// acquire permit
 	if err := g.acquire(ctx); err != nil {
 		return err
 	}
-
-	// Ensure the permit is released exactly once, even if fn panics or returns error
 	defer g.release()
 
-	// 3. Post-grant check: verify context did not cancel right after grant
+	// verify context cancellation after grant
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	// 4. Execute the protected workload
 	return fn(ctx)
 }
 
@@ -74,21 +61,18 @@ func (g *Guard) Do(ctx context.Context, fn func(ctx context.Context) error) erro
 func (g *Guard) acquire(ctx context.Context) error {
 	g.mu.Lock()
 
-	// Check if guard is closed
 	if g.closed {
 		g.stats.ClosedRejections++
 		g.mu.Unlock()
 		return ErrClosed
 	}
 
-	// Check if caller context is already canceled
 	if err := ctx.Err(); err != nil {
 		g.mu.Unlock()
 		return err
 	}
 
-	// Fast path: Immediate admission if active slots are below MaxConcurrency
-	// and no prior waiters are pending in queue (preserves FIFO fairness).
+	// fast path: immediate admission
 	if g.inFlight < g.cfg.MaxConcurrency && g.waiters.Len() == 0 {
 		g.inFlight++
 		g.stats.AcceptedRequests++
@@ -96,23 +80,21 @@ func (g *Guard) acquire(ctx context.Context) error {
 		return nil
 	}
 
-	// Check bounded queue capacity
+	// check queue capacity
 	if g.waiters.Len() >= g.cfg.MaxQueueSize {
 		g.stats.RejectedRequests++
 		g.mu.Unlock()
 		return ErrOverloaded
 	}
 
-	// Enqueue waiter
+	// enqueue waiter
 	w := newWaiter()
 	g.waiters.Push(w)
 	g.mu.Unlock()
 
-	// Wait for slot grant, cancellation, or guard closure
+	// wait for slot or cancellation
 	select {
 	case <-w.ready:
-		// Slot has been granted or guard was closed.
-		// Check the terminal state under lock.
 		g.mu.Lock()
 		state := w.state
 		g.mu.Unlock()
@@ -120,16 +102,12 @@ func (g *Guard) acquire(ctx context.Context) error {
 		if state == stateClosed {
 			return ErrClosed
 		}
-		// Permit successfully granted
 		return nil
 
 	case <-ctx.Done():
-		// Context was canceled while blocked in queue.
-		// Resolve the grant-versus-cancellation race under the mutex.
 		g.mu.Lock()
 		switch w.state {
 		case stateWaiting:
-			// Cancellation won the race.
 			w.state = stateCanceled
 			g.waiters.Remove(w)
 			g.stats.CanceledRequests++
@@ -137,9 +115,6 @@ func (g *Guard) acquire(ctx context.Context) error {
 			return ctx.Err()
 
 		case stateGranted:
-			// Grant won the race right as context was canceled.
-			// The caller now owns this permit.
-			// Release the permit back or transfer it to the next waiter.
 			g.mu.Unlock()
 			g.release()
 			return ctx.Err()
